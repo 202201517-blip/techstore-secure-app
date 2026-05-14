@@ -28,4 +28,4 @@ El sistema permitirá que los usuarios puedan registrarse, iniciar sesión, visu
 
 ## Estado del proyecto
 
-Base de datos PostgreSQL creada y estructura inicial del repositorio preparada.
+Base de datos PostgreSQL creada desde la rama feature/conflict-demo.
