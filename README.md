@@ -28,4 +28,4 @@ El sistema permitirá que los usuarios puedan registrarse, iniciar sesión, visu
 
 ## Estado del proyecto
 
-Base de datos PostgreSQL creada y repositorio GitHub preparado desde develop.
+Base de datos PostgreSQL creada, repositorio GitHub preparado y conflicto de ramas resuelto correctamente.
