@@ -1,0 +1,25 @@
+# IntelliJ
+.idea/
+*.iml
+out/
+
+# Android Studio
+.gradle/
+local.properties
+build/
+app/build/
+
+# Spring Boot / Java
+target/
+*.class
+
+# Sistema operativo
+.DS_Store
+Thumbs.db
+
+# Archivos temporales
+*.log
+*.tmp
+
+# Variables de entorno
+.env
