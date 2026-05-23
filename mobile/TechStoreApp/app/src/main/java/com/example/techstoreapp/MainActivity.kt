@@ -34,6 +34,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -49,7 +50,10 @@ import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.example.techstoreapp.data.model.LoginRequest
+import com.example.techstoreapp.data.remote.RetrofitClient
 import com.example.techstoreapp.ui.theme.TechStoreAppTheme
+import kotlinx.coroutines.launch
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -75,6 +79,9 @@ fun LoginScreen() {
     var password by remember { mutableStateOf("") }
     var rememberMe by remember { mutableStateOf(false) }
     var message by remember { mutableStateOf("") }
+    var isLoading by remember { mutableStateOf(false) }
+
+    val coroutineScope = rememberCoroutineScope()
 
     val purple = Color(0xFF4F16E8)
     val darkPurple = Color(0xFF16003A)
@@ -265,8 +272,46 @@ fun LoginScreen() {
 
                 Button(
                     onClick = {
-                        message = validateLogin(email, password)
+                        val validationMessage = validateLogin(email, password)
+
+                        if (validationMessage != null) {
+                            message = validationMessage
+                            return@Button
+                        }
+
+                        coroutineScope.launch {
+                            isLoading = true
+                            message = "Conectando con el servidor..."
+
+                            try {
+                                val response = RetrofitClient.authApi.login(
+                                    LoginRequest(
+                                        email = email.trim(),
+                                        password = password
+                                    )
+                                )
+
+                                if (response.isSuccessful) {
+                                    val authResponse = response.body()
+
+                                    if (authResponse?.token != null) {
+                                        val shortToken = authResponse.token.take(30)
+
+                                        message = "Login correcto. Token recibido: $shortToken..."
+                                    } else {
+                                        message = "Login correcto, pero no se recibió token."
+                                    }
+                                } else {
+                                    message = "Credenciales inválidas o error ${response.code()}."
+                                }
+                            } catch (e: Exception) {
+                                message = "No se pudo conectar con la API: ${e.message}"
+                            } finally {
+                                isLoading = false
+                            }
+                        }
                     },
+                    enabled = !isLoading,
                     modifier = Modifier
                         .fillMaxWidth()
                         .height(54.dp),
@@ -276,7 +321,7 @@ fun LoginScreen() {
                     )
                 ) {
                     Text(
-                        text = "Iniciar sesión",
+                        text = if (isLoading) "Validando..." else "Iniciar sesión",
                         fontSize = 16.sp,
                         fontWeight = FontWeight.Bold,
                         color = Color.White
@@ -288,7 +333,11 @@ fun LoginScreen() {
                 if (message.isNotEmpty()) {
                     Text(
                         text = message,
-                        color = if (message.contains("correctamente")) Color(0xFF16A34A) else Color(0xFFDC2626),
+                        color = if (message.contains("correcto") || message.contains("Token")) {
+                            Color(0xFF16A34A)
+                        } else {
+                            Color(0xFFDC2626)
+                        },
                         fontSize = 13.sp
                     )
 
@@ -373,7 +422,7 @@ fun SocialButton(
 fun validateLogin(
     email: String,
     password: String
-): String {
+): String? {
     if (email.isBlank()) {
         return "Debes ingresar tu correo electrónico."
     }
@@ -390,7 +439,7 @@ fun validateLogin(
         return "La contraseña debe tener al menos 6 caracteres."
     }
 
-    return "Validación correcta. Login listo para conectar al backend."
+    return null
 }
 
 @Preview(showBackground = true)
