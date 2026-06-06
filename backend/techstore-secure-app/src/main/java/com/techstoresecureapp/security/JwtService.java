@@ -1,6 +1,7 @@
 package com.techstoresecureapp.security;
 
 import com.techstoresecureapp.entity.AppUser;
+import io.jsonwebtoken.Claims;
 import io.jsonwebtoken.Jwts;
 import io.jsonwebtoken.security.Keys;
 import org.springframework.beans.factory.annotation.Value;
@@ -37,6 +38,45 @@ public class JwtService {
                 .expiration(expirationDate)
                 .signWith(getSecretKey())
                 .compact();
+    }
+
+    public String extractEmail(String token) {
+        return extractClaims(token).getSubject();
+    }
+
+    public String extractRole(String token) {
+        return extractClaims(token).get("role", String.class);
+    }
+
+    public Long extractUserId(String token) {
+        Object userId = extractClaims(token).get("userId");
+
+        if (userId instanceof Integer) {
+            return ((Integer) userId).longValue();
+        }
+
+        if (userId instanceof Long) {
+            return (Long) userId;
+        }
+
+        return Long.valueOf(userId.toString());
+    }
+
+    public boolean isTokenValid(String token) {
+        try {
+            Claims claims = extractClaims(token);
+            return claims.getExpiration().after(new Date());
+        } catch (Exception e) {
+            return false;
+        }
+    }
+
+    private Claims extractClaims(String token) {
+        return Jwts.parser()
+                .verifyWith(getSecretKey())
+                .build()
+                .parseSignedClaims(token)
+                .getPayload();
     }
 
     private SecretKey getSecretKey() {

@@ -24,7 +24,6 @@ import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.CheckboxDefaults
-import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Surface
@@ -50,7 +49,9 @@ import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.example.techstoreapp.data.local.SessionManager
 import com.example.techstoreapp.data.model.LoginRequest
+import com.example.techstoreapp.data.model.RegisterRequest
 import com.example.techstoreapp.data.remote.RetrofitClient
 import com.example.techstoreapp.ui.theme.TechStoreAppTheme
 import kotlinx.coroutines.launch
@@ -66,7 +67,11 @@ class MainActivity : ComponentActivity() {
                     modifier = Modifier.fillMaxSize(),
                     color = Color.White
                 ) {
-                    LoginScreen()
+                    val sessionManager = remember {
+                        SessionManager(this@MainActivity)
+                    }
+
+                    AuthScreen(sessionManager = sessionManager)
                 }
             }
         }
@@ -74,7 +79,48 @@ class MainActivity : ComponentActivity() {
 }
 
 @Composable
-fun LoginScreen() {
+fun AuthScreen(
+    sessionManager: SessionManager
+) {
+    var showRegister by remember { mutableStateOf(false) }
+    var isLoggedIn by remember { mutableStateOf(sessionManager.isLoggedIn()) }
+
+    if (isLoggedIn) {
+        CatalogScreen(
+            sessionManager = sessionManager,
+            onLogout = {
+                sessionManager.clearSession()
+                isLoggedIn = false
+                showRegister = false
+            }
+        )
+    } else {
+        if (showRegister) {
+            RegisterScreen(
+                onGoToLogin = {
+                    showRegister = false
+                }
+            )
+        } else {
+            LoginScreen(
+                sessionManager = sessionManager,
+                onLoginSuccess = {
+                    isLoggedIn = true
+                },
+                onGoToRegister = {
+                    showRegister = true
+                }
+            )
+        }
+    }
+}
+
+@Composable
+fun LoginScreen(
+    sessionManager: SessionManager,
+    onLoginSuccess: () -> Unit,
+    onGoToRegister: () -> Unit
+) {
     var email by remember { mutableStateOf("") }
     var password by remember { mutableStateOf("") }
     var rememberMe by remember { mutableStateOf(false) }
@@ -163,8 +209,9 @@ fun LoginScreen() {
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(horizontal = 22.dp)
-                .align(Alignment.BottomCenter),
-            shape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp),
+                .align(Alignment.TopCenter)
+                .padding(top = 265.dp),
+            shape = RoundedCornerShape(28.dp),
             colors = CardDefaults.cardColors(
                 containerColor = Color.White
             ),
@@ -295,9 +342,13 @@ fun LoginScreen() {
                                     val authResponse = response.body()
 
                                     if (authResponse?.token != null) {
-                                        val shortToken = authResponse.token.take(30)
+                                        sessionManager.saveSession(
+                                            token = authResponse.token,
+                                            email = authResponse.email ?: email.trim(),
+                                            role = authResponse.role ?: "CUSTOMER"
+                                        )
 
-                                        message = "Login correcto. Token recibido: $shortToken..."
+                                        onLoginSuccess()
                                     } else {
                                         message = "Login correcto, pero no se recibió token."
                                     }
@@ -344,25 +395,6 @@ fun LoginScreen() {
                     Spacer(modifier = Modifier.height(10.dp))
                 }
 
-                Text(
-                    text = "o continúa con",
-                    color = textGray,
-                    fontSize = 13.sp
-                )
-
-                Spacer(modifier = Modifier.height(14.dp))
-
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(10.dp)
-                ) {
-                    SocialButton("G", Modifier.weight(1f))
-                    SocialButton("f", Modifier.weight(1f))
-                    SocialButton("", Modifier.weight(1f))
-                }
-
-                Spacer(modifier = Modifier.height(20.dp))
-
                 Row(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
@@ -373,9 +405,7 @@ fun LoginScreen() {
                     )
 
                     TextButton(
-                        onClick = {
-                            message = "Pantalla de registro pendiente."
-                        }
+                        onClick = onGoToRegister
                     ) {
                         Text(
                             text = "Regístrate",
@@ -391,30 +421,280 @@ fun LoginScreen() {
 }
 
 @Composable
-fun SocialButton(
-    text: String,
-    modifier: Modifier = Modifier
+fun RegisterScreen(
+    onGoToLogin: () -> Unit
 ) {
-    Card(
-        modifier = modifier.height(50.dp),
-        shape = RoundedCornerShape(12.dp),
-        colors = CardDefaults.cardColors(
-            containerColor = Color.White
-        ),
-        elevation = CardDefaults.cardElevation(
-            defaultElevation = 2.dp
-        )
+    var fullName by remember { mutableStateOf("") }
+    var email by remember { mutableStateOf("") }
+    var password by remember { mutableStateOf("") }
+    var confirmPassword by remember { mutableStateOf("") }
+    var message by remember { mutableStateOf("") }
+    var isLoading by remember { mutableStateOf(false) }
+
+    val coroutineScope = rememberCoroutineScope()
+
+    val purple = Color(0xFF4F16E8)
+    val darkPurple = Color(0xFF16003A)
+    val textDark = Color(0xFF111827)
+    val textGray = Color(0xFF6B7280)
+
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(Color.White)
     ) {
-        Box(
-            modifier = Modifier.fillMaxSize(),
-            contentAlignment = Alignment.Center
+        Column(
+            modifier = Modifier.fillMaxSize()
         ) {
-            Text(
-                text = text,
-                fontSize = 22.sp,
-                fontWeight = FontWeight.Bold,
-                color = Color(0xFF111827)
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(245.dp)
+                    .background(
+                        brush = Brush.verticalGradient(
+                            colors = listOf(
+                                darkPurple,
+                                Color(0xFF24105F)
+                            )
+                        )
+                    ),
+                contentAlignment = Alignment.Center
+            ) {
+                Column(
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .size(72.dp)
+                            .clip(RoundedCornerShape(22.dp))
+                            .background(Color(0xFF6D28D9)),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(
+                            text = "🛍",
+                            fontSize = 38.sp
+                        )
+                    }
+
+                    Spacer(modifier = Modifier.height(14.dp))
+
+                    Text(
+                        text = "Crear cuenta",
+                        color = Color.White,
+                        fontSize = 28.sp,
+                        fontWeight = FontWeight.Bold
+                    )
+
+                    Text(
+                        text = "Regístrate para comprar de forma segura",
+                        color = Color.White,
+                        fontSize = 14.sp
+                    )
+                }
+            }
+        }
+
+        Card(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 22.dp)
+                .align(Alignment.TopCenter)
+                .padding(top = 215.dp),
+            shape = RoundedCornerShape(28.dp),
+            colors = CardDefaults.cardColors(
+                containerColor = Color.White
+            ),
+            elevation = CardDefaults.cardElevation(
+                defaultElevation = 10.dp
             )
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(24.dp),
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                Text(
+                    text = "Registro",
+                    fontSize = 26.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = textDark
+                )
+
+                Spacer(modifier = Modifier.height(8.dp))
+
+                Text(
+                    text = "Completa tus datos para crear una cuenta",
+                    fontSize = 14.sp,
+                    color = textGray
+                )
+
+                Spacer(modifier = Modifier.height(22.dp))
+
+                OutlinedTextField(
+                    value = fullName,
+                    onValueChange = { fullName = it },
+                    modifier = Modifier.fillMaxWidth(),
+                    placeholder = { Text("Nombre completo") },
+                    singleLine = true,
+                    shape = RoundedCornerShape(14.dp),
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedBorderColor = purple,
+                        unfocusedBorderColor = Color(0xFFE5E7EB)
+                    )
+                )
+
+                Spacer(modifier = Modifier.height(12.dp))
+
+                OutlinedTextField(
+                    value = email,
+                    onValueChange = { email = it },
+                    modifier = Modifier.fillMaxWidth(),
+                    placeholder = { Text("Correo electrónico") },
+                    singleLine = true,
+                    keyboardOptions = KeyboardOptions(
+                        keyboardType = KeyboardType.Email
+                    ),
+                    shape = RoundedCornerShape(14.dp),
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedBorderColor = purple,
+                        unfocusedBorderColor = Color(0xFFE5E7EB)
+                    )
+                )
+
+                Spacer(modifier = Modifier.height(12.dp))
+
+                OutlinedTextField(
+                    value = password,
+                    onValueChange = { password = it },
+                    modifier = Modifier.fillMaxWidth(),
+                    placeholder = { Text("Contraseña") },
+                    singleLine = true,
+                    visualTransformation = PasswordVisualTransformation(),
+                    keyboardOptions = KeyboardOptions(
+                        keyboardType = KeyboardType.Password
+                    ),
+                    shape = RoundedCornerShape(14.dp),
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedBorderColor = purple,
+                        unfocusedBorderColor = Color(0xFFE5E7EB)
+                    )
+                )
+
+                Spacer(modifier = Modifier.height(12.dp))
+
+                OutlinedTextField(
+                    value = confirmPassword,
+                    onValueChange = { confirmPassword = it },
+                    modifier = Modifier.fillMaxWidth(),
+                    placeholder = { Text("Confirmar contraseña") },
+                    singleLine = true,
+                    visualTransformation = PasswordVisualTransformation(),
+                    keyboardOptions = KeyboardOptions(
+                        keyboardType = KeyboardType.Password
+                    ),
+                    shape = RoundedCornerShape(14.dp),
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedBorderColor = purple,
+                        unfocusedBorderColor = Color(0xFFE5E7EB)
+                    )
+                )
+
+                Spacer(modifier = Modifier.height(18.dp))
+
+                Button(
+                    onClick = {
+                        val validationMessage = validateRegister(
+                            fullName = fullName,
+                            email = email,
+                            password = password,
+                            confirmPassword = confirmPassword
+                        )
+
+                        if (validationMessage != null) {
+                            message = validationMessage
+                            return@Button
+                        }
+
+                        coroutineScope.launch {
+                            isLoading = true
+                            message = "Registrando usuario..."
+
+                            try {
+                                val response = RetrofitClient.authApi.register(
+                                    RegisterRequest(
+                                        fullName = fullName.trim(),
+                                        email = email.trim(),
+                                        password = password
+                                    )
+                                )
+
+                                if (response.isSuccessful) {
+                                    message = "Usuario registrado correctamente. Ahora puedes iniciar sesión."
+                                } else {
+                                    message = "No se pudo registrar. Error ${response.code()}."
+                                }
+                            } catch (e: Exception) {
+                                message = "No se pudo conectar con la API: ${e.message}"
+                            } finally {
+                                isLoading = false
+                            }
+                        }
+                    },
+                    enabled = !isLoading,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(54.dp),
+                    shape = RoundedCornerShape(14.dp),
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = purple
+                    )
+                ) {
+                    Text(
+                        text = if (isLoading) "Registrando..." else "Registrarme",
+                        fontSize = 16.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = Color.White
+                    )
+                }
+
+                Spacer(modifier = Modifier.height(14.dp))
+
+                if (message.isNotEmpty()) {
+                    Text(
+                        text = message,
+                        color = if (message.contains("correctamente")) {
+                            Color(0xFF16A34A)
+                        } else {
+                            Color(0xFFDC2626)
+                        },
+                        fontSize = 13.sp
+                    )
+
+                    Spacer(modifier = Modifier.height(8.dp))
+                }
+
+                Row(
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = "¿Ya tienes cuenta?",
+                        color = textDark,
+                        fontSize = 13.sp
+                    )
+
+                    TextButton(
+                        onClick = onGoToLogin
+                    ) {
+                        Text(
+                            text = "Inicia sesión",
+                            color = purple,
+                            fontSize = 13.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+                }
+            }
         }
     }
 }
@@ -442,10 +722,43 @@ fun validateLogin(
     return null
 }
 
+fun validateRegister(
+    fullName: String,
+    email: String,
+    password: String,
+    confirmPassword: String
+): String? {
+    if (fullName.isBlank()) {
+        return "Debes ingresar tu nombre completo."
+    }
+
+    if (email.isBlank()) {
+        return "Debes ingresar tu correo electrónico."
+    }
+
+    if (!Patterns.EMAIL_ADDRESS.matcher(email).matches()) {
+        return "Ingresa un correo electrónico válido."
+    }
+
+    if (password.isBlank()) {
+        return "Debes ingresar una contraseña."
+    }
+
+    if (password.length < 6) {
+        return "La contraseña debe tener al menos 6 caracteres."
+    }
+
+    if (password != confirmPassword) {
+        return "Las contraseñas no coinciden."
+    }
+
+    return null
+}
+
 @Preview(showBackground = true)
 @Composable
 fun LoginScreenPreview() {
     TechStoreAppTheme {
-        LoginScreen()
+        Text("Preview no disponible con SessionManager")
     }
 }
